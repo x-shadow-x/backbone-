@@ -336,6 +336,8 @@
         // 设置attributes默认数据的解析方法, 例如默认数据是从服务器获取(或原始数据是XML格式), 为了兼容set方法所需的数据格式, 可使用parse方法进行解析
         if (options && options.parse)
             attributes = this.parse(attributes);
+
+        // 函数定义在源码末尾~第一个参数为要获取属性的对象~第二个参数为要获取的属性的名字，如果属性名在对象中是一个函数, 则执行并返回该函数的返回值
         if (defaults = getValue(this, 'defaults')) {
             // 如果Model在定义时设置了defaults默认数据, 则初始化数据使用defaults与attributes参数合并后的数据(attributes中的数据会覆盖defaults中的同名数据)
             attributes = _.extend({}, defaults, attributes);
@@ -345,11 +347,16 @@
             this.collection = options.collection;
         // attributes属性存储了当前模型的JSON对象化数据, 创建模型时默认为空
         this.attributes = {};
-        // 定义_escapedAttributes缓存对象, 它将缓存通过escape方法处理过的数据
+        // 定义_escapedAttributes缓存对象, 它将缓存通过escape方法处理过的数据~
+        // escape和 get方法一样~都是用来获取 model中存储的属性值~不过 escape会将要获取的属性值做一个转化~它会将属性值中的html标签&, <, >, ", `进行转化
+        // 这里为了防止用户获取同一个属性值的时候多次做转化~所以每次转化后都会将其添加到这个字段中做一个缓存以便下次再次获取时~直接返回~提高速度
         this._escapedAttributes = {};
         // 为每一个模型配置一个唯一标识
+        // underscore中的工具函数，设置一个自增的全局变量函数中传递的字符将作为前缀拼接到自增变量之前
         this.cid = _.uniqueId('c');
         // 定义一系列用于记录数据状态的对象, 具体含义请参考对象定义时的注释
+        // 注意这里相当于给成员属性赋值了~因为下面使用 extend方法给 Model.prototype扩展了Events对象和一个带默认值的对象
+        // 所以此处输出在赋值前输出的话会发现~这3个属性的值都是 null
         this.changed = {};
         this._silent = {};
         this._pending = {};
@@ -357,6 +364,9 @@
         this.set(attributes, {
             silent: true
         });
+        console.log(this.changed);
+        console.log(this._silent);
+        console.log(this._pending);
         // 上面已经设置了初始化数据, changed, _silent, _pending对象的状态可能已经发生变化, 这里重新进行初始化
         this.changed = {};
         this._silent = {};
@@ -370,11 +380,12 @@
     // 使用extend方法为Model原型定义一系列属性和方法
     _.extend(Model.prototype, Events, {
 
-        // changed属性记录了每次调用set方法时, 被改变数据的key集合
+        // changed属性记录了每次调用set方法时, 被改变数据的 key集合
         changed: null,
 
-        // // 当指定silent属性时, 不会触发change事件, 被改变的数据会记录下来, 直到下一次触发change事件
+        // // 当指定 silent 属性时, 不会触发change事件, 被改变的数据会记录下来, 直到下一次触发change事件
         // _silent属性用来记录使用silent时的被改变的数据
+        // 比如：obj.set('name', 'Xx', {silent: true})~则 _silent的值为 {name: true}
         _silent: null,
 
         _pending: null,
@@ -423,7 +434,7 @@
                 attrs = key;
                 options = value;
             } else {
-                // 通过key, value两个参数单独设置, 将数据放到attrs对象中方便统一处理
+                // 通过 key, value两个参数单独设置, 将数据放到attrs对象中方便统一处理
                 attrs = {};
                 attrs[key] = value;
             }
@@ -437,8 +448,8 @@
             // 一般在复制一个Model对象的数据到另一个Model对象时, 会执行该动作
             if (attrs instanceof Model)
                 attrs = attrs.attributes;
-            // 如果options配置对象中设置了unset属性, 则将attrs数据对象中的所有属性重置为undefined
-            // 一般在复制一个Model对象的数据到另一个Model对象时, 但仅仅需要复制Model中的数据而不需要复制值时执行该操作
+            // 如果options配置对象中设置了 unset 属性, 则将 attrs数据对象中的所有属性重置为undefined
+            // 一般在复制一个Model对象的数据到另一个Model对象时, 但仅仅需要复制Model中的属性而不需要复制值时执行该操作
             if (options.unset)
                 for (attr in attrs)
                     attrs[attr] =
@@ -450,6 +461,10 @@
 
             // 如果设置的id属性名被包含在数据集合中, 则将id覆盖到模型的id属性
             // 这是为了确保在自定义id属性名后, 访问模型的id属性时, 也能正确访问到id
+            // （不过笔者晓得cid和id这对冤家到底什么关系~都说自己是唯一标识）
+            // 这里根据代码意思应该是idAttribute属性的值指明了一个model对象中唯一标识被记录到了什么属性名下~默认为id~即唯一标识的值被记录到id下
+            // 但是用户还可以通过设置 idAttribute属性来自定义存储唯一标识的字段名~这里的结果是不管用户有没有重新指定 idAttribute的值~模型的id字段一定会存储这个唯一标识
+            // 同时~用户如果设置了存储唯一标识的属性的值~那就用用户设置的这个值覆盖原来的唯一标识
             if (this.idAttribute in attrs)
                 this.id = attrs[this.idAttribute];
 
@@ -466,7 +481,7 @@
                 // attr存储当前属性名称, val存储当前属性的值
                 val = attrs[attr];
 
-                // 如果当前数据在模型中不存在, 或已经发生变化, 或在options中指定了unset属性删除, 则删除该数据被换存在_escapedAttributes中的数据
+                // 如果当前数据在模型中不存在, 或已经发生变化, 或在options中指定了unset属性删除, 则删除该数据被缓存在_escapedAttributes中的数据
                 if (!_.isEqual(now[attr], val) || (options.unset && _.has(now, attr))) {
                     // 仅删除通过escape缓存过的数据, 这是为了保证缓存中的数据与模型中的真实数据保持同步
                     delete escaped[attr];
@@ -494,8 +509,14 @@
             }
 
             // 调用change方法, 将触发change事件绑定的函数
-            if (!options.silent)
+            // 注意这里的 change函数和用户实例化对象的时候指定的 change事件处理函数是两回事
+            // 对外表现就相当于：如果此次设置（修改）属性值没有指定 silent选项为true~则对象内部会在设置完成后自动调用 change成员方法
+            if (!options.silent) {
+                // set函数开头有给options添加一个changes属性~并设置局部变量 changes和options.changes指向相同
+                // 注意局部变量changes和this.changed不同~前者记录没有设置 unset选项并且改变了的属性名并将其值设置为 true~后者记录当前属性已经发生变化的状态
                 this.change(options);
+            }
+
             return this;
         },
         // 从当前模型中删除指定的数据(属性也将被同时删除)
@@ -551,6 +572,8 @@
                 attrs[key] = value;
             }
             // 配置对象必须是一个新的对象
+            // 这里写法和set函数中处理options的方法不一样~此处需要一个新的options对象~
+            // 和在fetch中的处理方式一样~因为随后需要改变options的属性
             options = options ? _.clone(options) : {};
 
             // 如果在options中设置了wait选项, 则被改变的数据将会被提前验证, 且服务器没有响应新数据(或响应失败)时, 本地数据会被还原为修改前的状态
@@ -565,11 +588,13 @@
             }
 
             // silentOptions在options对象中加入了silent(不对数据进行验证)
+            // 数据验证函数有一个参数接收 options参数~内部会判断 options参数中的silent字段是否为true~如果为true则验证结果直接返回true
             // 当使用wait参数时使用silentOptions配置项, 因为在上面已经对数据进行过验证
             // 如果没有设置wait参数, 则仍然使用原始的options配置项
             var silentOptions = _.extend({}, options, {
                 silent: true
             });
+
             // 将修改过最新的数据保存到模型中, 便于在sync方法中获取模型数据保存到服务器
             if (attrs && !this.set(attrs, options.wait ? silentOptions : options)) {
                 return false;
@@ -607,8 +632,10 @@
             var xhr = (this.sync || Backbone.sync).call(this, method, this, options);
             // 如果设置了options.wait, 则将数据还原为修改前的状态
             // 此时保存的请求还没有得到响应, 因此如果响应失败, 模型中将保持修改前的状态, 如果服务器响应成功, 则会在success中设置模型中的数据为最新状态
-            if (options.wait)
+            if (options.wait) {
+                // silentOptions就是在用户调用save方法时传进来的options的基础上添加了一个silent属性并设置为true
                 this.set(current, silentOptions);
+            }
             return xhr;
         },
         // 删除模型, 模型将同时从所属的Collection集合中被删除
@@ -624,9 +651,21 @@
             // 删除模型时, 模型中的数据并没有被清空, 但模型已经从集合中移除, 因此当没有任何地方引用该模型时, 会被自动从内存中释放
             // 建议在删除模型时, 将模型对象的引用变量设置为null
             var triggerDestroy = function() {
+                // 注意这里的机制是当判断到当前模型是客户端新建的~则会自动调用 triggerDestroy方法~去触发模型的 destroy事件
+                // 但是用户都在定义模型的时候是否有监听 destroy事件是不确定的~这里只是自动去触发~至于有没有对应的事件处理函数~那就是另外一回事了
+                // 这里我们可能疑惑~我们如果没有定义destory事件处理函数~那这里是如何通过触发模型的destory事件去将集合中对应的模型删除的呢~这里删除的机制是这样的：
+                // 实例模型被添加到 collection有两种情况~一是实例化Collection对象的时候将模型数据传入构造函数~二是Collection实例对象调用add方法添加模型
+                // 通过 new方式添加的话会在构造函数中执行reset成员方法~其中会调用add方法将模型添加到集合中
+                // 所以总的来说~模型被添加到集合一定是通过集合的add方法~而集合的add成员方法中会遍历被加到集合中的 model集合~
+                // 监听每个模型的 all事件~并为每个模型的all事件绑定_onModelEvent成员方法
+                // 这个collection的成员方法会判断如果导致本次all事件被触发的事件是destroy~则会调用collection的另一个成员方法remove移除当前的model对象
+                // 从这里就可以看出all事件在上面被处理时~把导致all事件被触发的事件名作为第一个参数的作用了~
+                // 这里触发了模型的destory事件~因为模型上任何一个事件被触发~最后都会自动触发all事件~同时~all事件处理函数的参数传递不太一样~其第一个参数记录导致本次all事件被触发的事件名
+                // 这里就是 'destroy' ~它将作为参数传递给_onModelEvent方法~然后这个事件处理函数内部就会判断~当发现第一个参数是 'destroy'的时候~就会去调用 collection的 remove成员方法
+                // 最后的结果就是当前这个模型被从collection中 remove掉
                 model.trigger('destroy', model, model.collection, options);
             };
-            // 如果该模型是一个客户端新建的模型, 则直接调用triggerDestroy从集合中将模型移除
+            // 如果该模型是一个客户端新建的模型, 则直接调用 triggerDestroy 从集合中将模型移除
             if (this.isNew()) {
                 triggerDestroy();
                 return false;
@@ -676,6 +715,8 @@
         // parse方法用于解析从服务器获取的数据, 返回一个能够被set方法解析的模型数据
         // 一般parse方法会根据服务器返回的数据进行重载, 以便构建与服务器的无缝连接
         // 当服务器返回的数据结构与set方法所需的数据结构不一致(例如服务器返回XML格式数据时), 可使用parse方法进行转换
+        // 这里之所以只是简单的返回数据是因为用户如果真的使用的parse方法去解析数据~说明fetch回来的数据其结构是不能直接被操作的~
+        // 需要进行转换~那么具体要做什么转换就应该在定义模型类的时候去重载此方法并在里面实现
         parse: function(resp, xhr) {
             return resp;
         },
@@ -714,6 +755,15 @@
             // 遍历changes对象, 分别针对每一个属性触发单独的change事件
             for (var attr in changes) {
                 // 将Model对象, 属性值, 配置项作为参数以此传递给事件的监听函数
+                // trigger函数定义处只有一个参数~是一个被触发的事件的事件名的数组
+                // 不过函数体中会将第二以及第二个以后的参数存储盗一个rest的局部变量~传递给被触发的事件处理函数
+                // 一般我们定义模型实例对象某个属性改变对应的change事件处理函数如下：
+                /**
+                 * javabook.on('change:name', function(model, value) {  
+                 *     console.log('change:name事件被触发');  
+                 * });
+                 */
+                // 对应下面的参数~很好理解
                 this.trigger('change:' + attr, this, this.get(attr), options);
             }
 
