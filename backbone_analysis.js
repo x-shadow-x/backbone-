@@ -364,9 +364,7 @@
         this.set(attributes, {
             silent: true
         });
-        console.log(this.changed);
-        console.log(this._silent);
-        console.log(this._pending);
+
         // 上面已经设置了初始化数据, changed, _silent, _pending对象的状态可能已经发生变化, 这里重新进行初始化
         this.changed = {};
         this._silent = {};
@@ -744,11 +742,16 @@
             this._changing = true;
 
             // 将非本次改变的数据状态添加到_pending对象中
+            // 如果调用set方法设置模型的属性值时（假设为name属性）传递了silent为 true则不会调用change方法~自然不会执行到这一步~
+            // 但是设置了silent选项的属性已经被记录到 this._silent中~当下次再次调用set方法设置model的某个属性的值时~
+            // 如果没有设置silent选项~则change函数会被调用~执行到此步时将根据之前保存的数据判断出（name属性）被设置了silent选项~
+            // 所以此属性被添加到 this._pending中~并将值设置为 true
             for (var attr in this._silent)
                 this._pending[attr] = true;
 
             // changes对象包含了当前数据上一次执行change事件至今, 已被改变的所有数据
             // 如果之前使用silent未触发change事件, 则本次会被放到changes对象中
+            // 这里options.changes保存了本次通过set方法修改的属性~this._silent保存了上一次因为设置了silent选项的属性
             var changes = _.extend({}, options.changes, this._silent);
             // 重置_silent对象
             this._silent = {};
@@ -778,14 +781,18 @@
                 this.trigger('change', this, options);
                 // 遍历changed对象中的数据, 并依次将已改变数据的状态从changed中移除
                 // 在此之后如果调用hasChanged检查数据状态, 将得到false(未改变)
+                // 在 set方法中会对将要设置的属性进行判断~如果属性的值因为本次设置而发生了变化~则会被记录到this.changed中
                 for (var attr in this.changed) {
+                    // 不晓得为啥这里要做这个判断~上面已经手动将this._silent和this._pending设置为{}了~尴尬.........
                     if (this._pending[attr] || this._silent[attr])
                         continue;
                     // 移除changed中数据的状态
                     delete this.changed[attr];
                 }
+
                 // change事件执行完毕, _previousAttributes属性将记录当前模型最新的数据副本
-                // 因此如果需要获取数据的上一个状态, 一般只通过在触发的change事件中通过previous或previousAttributes方法获取
+                // 因此如果需要获取数据的上一个状态, 一般是通过在触发的change事件中通过previous或previousAttributes方法获取
+                // 即在用户自定义的change事件监听函数中去获取~不然当程序执行到这一步的时候 this._previousAttributes已经存放最新的数据副本了
                 this._previousAttributes = _.clone(this.attributes);
             }
 
@@ -852,6 +859,7 @@
         // @param {Object} attrs 数据模型的attributes属性, 存储模型的对象化数据
         // @param {Object} options 配置项
         // @return {Boolean} 验证通过返回true, 不通过返回false
+        // 此处这个函数效果大致和上面的isValid相同~只是从设计上来说此函数是给backbone内部调用的~无需用户干涉调用
         _validate: function(attrs, options) {
             // 如果在调用set, save, add等数据更新方法时设置了options.silent属性, 则忽略验证
             // 如果Model中没有添加validate方法, 则忽略验证
